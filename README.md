@@ -156,18 +156,50 @@ At **192 kHz** OCTA drops to **4 channels** (vs 10/12); QUAD drops to **2**
 
 ## Kernel module (once per kernel)
 
+The streaming-only driver must be built against the exact running kernel, so it
+is re-installed after each kernel upgrade. Three steps:
+
+### 1. Prepare the driver source tree
+
+```bash
+./scripts/prepare-driver-tree.sh
+```
+
+This downloads the Fedora kernel source RPM for the running kernel, extracts the
+`sound/usb` subtree, and applies the two Roland patches from `patches/`. It
+places the result in the adjacent `linux-roland-fedora-$(uname -r | cut -d- -f1)`
+directory that the installer expects. If the running kernel has just been
+superseded and its source RPM retired from the normal repos, the script falls
+back to the Fedora Koji build archive automatically.
+
+### 2. Enroll a Secure Boot signing key (once)
+
+On a Secure Boot system the kernel rejects unsigned modules. Enroll a Machine
+Owner Key once so the installer can sign the module it builds:
+
+```bash
+./scripts/enroll-mok.sh
+```
+
+Then reboot and confirm enrollment in the firmware MokManager
+(“Enroll MOK” → “Continue” → “Yes” → enter the password you chose). The key is
+stored root-only at `/etc/mok/` and remains valid across kernel upgrades.
+
+### 3. Build and install
+
 ```bash
 ./scripts/install-native-driver.sh
 ```
 
-This builds the exact-kernel streaming-only Roland Capture source tree and
-installs `snd-usb-audio` transactionally while retaining the distribution's
-unchanged `snd-usbmidi-lib`. It backs up previous update modules,
-installs/reloads the non-root USB permission rule, reloads without a reboot,
-verifies the Roland PCM topology, and rolls back on failure. Set `DRIVER_TREE` when
-the prepared tree is not the adjacent `linux-roland-fedora-$(uname -r | cut
--d- -f1)` directory. Re-run after kernel upgrades. It installs no service,
-cron job, or background process.
+This builds the exact-kernel streaming-only Roland Capture module, signs it with
+your MOK key when Secure Boot enforces signatures, and installs `snd-usb-audio`
+transactionally while retaining the distribution's unchanged
+`snd-usbmidi-lib`. It backs up previous update modules, installs/reloads the
+non-root USB permission rule, reloads without a reboot, verifies the Roland PCM
+topology, and rolls back on failure. Set `DRIVER_TREE` when the prepared tree is
+not the adjacent `linux-roland-fedora-$(uname -r | cut -d- -f1)` directory.
+Re-run after kernel upgrades. It installs no service, cron job, or background
+process.
 
 ## Desktop channel splits (UCM)
 

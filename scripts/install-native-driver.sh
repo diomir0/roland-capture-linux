@@ -68,6 +68,23 @@ make -C "/usr/src/kernels/$kernel_release" M="$module_dir" W=1 modules
 	exit 1
 }
 
+# When Secure Boot enforces signed modules, sign the freshly built module with
+# the Machine Owner Key so the kernel accepts it (see enroll-mok.sh).
+sig_enforce=$(cat /sys/module/module/parameters/sig_enforce 2>/dev/null || echo N)
+if [[ $sig_enforce == Y ]]; then
+	mok_priv=/etc/mok/octa-capture.priv
+	mok_der=/etc/mok/octa-capture.der
+	if sudo test -f "$mok_priv" && sudo test -f "$mok_der"; then
+		sign_file=/usr/src/kernels/$kernel_release/scripts/sign-file
+		[[ -x $sign_file ]] || { echo "sign-file not found: $sign_file" >&2; exit 1; }
+		sudo "$sign_file" sha512 "$mok_priv" "$mok_der" "$module_dir/snd-usb-audio.ko"
+	else
+		echo "Secure Boot enforces signed modules but no MOK key is present." >&2
+		echo "Run ./scripts/enroll-mok.sh once (and reboot to enroll), then rerun." >&2
+		exit 1
+	fi
+fi
+
 sudo install -d -m 0755 "$backup_dir" "$updates_dir"
 sudo install -m 0644 "$project_dir/scripts/99-octa-capture.rules" \
 	/etc/udev/rules.d/99-octa-capture.rules
